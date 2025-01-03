@@ -99,6 +99,19 @@ void print_board(wchar_t board[8][8])
     }
 }
 
+void serialize_board(wchar_t board[8][8], char *buffer)
+{
+    char *ptr = buffer;
+    for (int i = 0; i < 8; i++)
+    {
+        for (int j = 0; j < 8; j++)
+        {
+            ptr += sprintf(ptr, "%lc ", board[i][j]);
+        }
+        ptr += sprintf(ptr, "\n");
+    }
+}
+
 int choose_color()
 {
     int color;
@@ -135,31 +148,46 @@ int main()
 {
     setlocale(LC_ALL, "");
     wchar_t board[8][8];
-    int buffer[256];
-    memset(buffer, 0, 256);
+    char buffer[256];
+    memset(buffer, 0, sizeof(buffer));
     init(board);
-    print_board(board);
+    //print_board(board);
     int sockfd= socket(AF_INET,SOCK_STREAM,0);
     struct sockaddr_in addr;
     socklen_t addr_len=sizeof(addr);
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     addr.sin_port = htons(4555);
-    addr.sin_addr.s_addr = INADDR_ANY;
     bind(sockfd,(struct sockaddr *)&addr,sizeof(struct sockaddr_in));
     listen(sockfd,2);
     int fd1 = accept(sockfd,(struct sockaddr *)&addr,&addr_len);
     int fd2 = accept(sockfd,(struct sockaddr *)&addr,&addr_len);
-    while(1)
+    while (1)
     {
-        memset(buffer, 0, 256);
-        if(read(fd1,buffer,256)>0)
+        char message_buffer[256];
+        char board_buffer[1024]; // Buffer to hold the serialized board
+        memset(message_buffer, 0, sizeof(message_buffer));
+
+        // Check if there is data from the first client
+        if (read(fd1, message_buffer, sizeof(message_buffer)) > 0)
         {
-            write(fd2,buffer,256);
+            printf("Client 1: %s", message_buffer);
+
+            // Serialize the board and send it to both clients
+            serialize_board(board, board_buffer);
+            write(fd2, board_buffer, strlen(board_buffer));
+            write(fd1, board_buffer, strlen(board_buffer));
         }
-        if(read(fd2,buffer,256)>0)
+
+        // Check if there is data from the second client
+        if (read(fd2, message_buffer, sizeof(message_buffer)) > 0)
         {
-            write(fd1,buffer,256);
+            printf("Client 2: %s", message_buffer);
+            // Serialize the board and send it to both clients
+            serialize_board(board, board_buffer);
+            write(fd1, board_buffer, strlen(board_buffer));
+            write(fd2, board_buffer, strlen(board_buffer));
         }
     }
     close(fd1);
