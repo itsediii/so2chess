@@ -166,25 +166,18 @@ int main()
     while (1)
     {
         char message_buffer[256];
-        char board_buffer[1024]; // Buffer to hold the serialized board
+        char board_buffer[1024];
         memset(message_buffer, 0, sizeof(message_buffer));
-
-        // Check if there is data from the first client
         if (read(fd1, message_buffer, sizeof(message_buffer)) > 0)
         {
             printf("Client 1: %s", message_buffer);
-
-            // Serialize the board and send it to both clients
             serialize_board(board, board_buffer);
             write(fd2, board_buffer, strlen(board_buffer));
             write(fd1, board_buffer, strlen(board_buffer));
         }
-
-        // Check if there is data from the second client
         if (read(fd2, message_buffer, sizeof(message_buffer)) > 0)
         {
             printf("Client 2: %s", message_buffer);
-            // Serialize the board and send it to both clients
             serialize_board(board, board_buffer);
             write(fd1, board_buffer, strlen(board_buffer));
             write(fd2, board_buffer, strlen(board_buffer));
