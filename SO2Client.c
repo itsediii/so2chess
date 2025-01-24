@@ -35,23 +35,49 @@ void chat_with_server(int sockfd)
     }
 }
 
-
-void print_board(wchar_t board[8][8])
+void receive_initial_board(int sockfd)
 {
-    for (int i = 0; i < 8; i++)
+    char buffer[BUFFER_SIZE];
+    memset(buffer, 0, sizeof(buffer));
+    if (read(sockfd, buffer, sizeof(buffer)) > 0)
     {
-        for (int j = 0; j < 8; j++)
+        printf("%s\n", buffer);
+    }
+    else
+    {
+        perror("Failed to receive the initial board");
+        exit(EXIT_FAILURE);
+    }
+}
+
+
+void print_board(wchar_t board[8][8], int is_white_turn)
+{
+    if (!is_white_turn)
+    {
+        for (int i = 0; i < 8; i++)
         {
-            if (board[i][j] != 0)
+            wprintf(L"%d ", 8 - i);
+            for (int j = 0; j < 8; j++)
             {
                 wprintf(L"%lc ", board[i][j]);
             }
-            else
-            {
-                wprintf(L". ");
-            }
+            wprintf(L"\n");
         }
-        wprintf(L"\n");
+        wprintf(L"  a b c d e f g h\n");
+    }
+    else
+    {
+        for (int i = 7; i >= 0; i--)
+        {
+            wprintf(L"%d ", 8 - i);
+            for (int j = 7; j >= 0; j--)
+            {
+                wprintf(L"%lc ", board[i][j]);
+            }
+            wprintf(L"\n");
+        }
+        wprintf(L"  h g f e d c b a\n");
     }
 }
 
@@ -74,13 +100,16 @@ int main()
         close(sockfd);
         exit(EXIT_FAILURE);
     }
+
     if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
         perror("Connection to the server failed");
         close(sockfd);
         exit(EXIT_FAILURE);
     }
+
     printf("Connected to the server. Type 'exit' to quit.\n");
+    receive_initial_board(sockfd);
     chat_with_server(sockfd);
     close(sockfd);
     return 0;
