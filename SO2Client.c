@@ -9,7 +9,7 @@
 
 #define BUFFER_SIZE 256
 
-void chat_with_server(int sockfd)
+int chat_with_server(int sockfd)
 {
     char buffer[1024];
     while (true)
@@ -25,19 +25,24 @@ void chat_with_server(int sockfd)
         if (strncmp(buffer, "exit", 4) == 0)
         {
             printf("Exiting chat.\n");
-            break;
+            return 0;
         }
         memset(buffer, 0, sizeof(buffer));
         if (read(sockfd, buffer, sizeof(buffer)) > 0)
         {
+            if(strncmp(buffer,"GAME OVER",9)==0)
+            {
+                printf("%s\n",buffer);
+                break;
+            }
             printf("Board:\n%s", buffer);
         }
     }
+    return 1;
 }
 
-void receive_initial_board(int sockfd)
+void receive_initial_board(int sockfd, char *buffer)
 {
-    char buffer[BUFFER_SIZE];
     memset(buffer, 0, sizeof(buffer));
     if (read(sockfd, buffer, sizeof(buffer)) > 0)
     {
@@ -48,6 +53,14 @@ void receive_initial_board(int sockfd)
         perror("Failed to receive the initial board");
         exit(EXIT_FAILURE);
     }
+}
+
+void client_color(int sockfd)
+{
+    int color;
+    printf("Choose your color:1 for White, 2 for Black\n");
+    scanf("%d",&color);
+    send(socket, &color, sizeof(color), 0);
 }
 
 
@@ -84,6 +97,7 @@ void print_board(wchar_t board[8][8], int is_white_turn)
 int main()
 {
     int sockfd;
+    char buffer[BUFFER_SIZE];
     struct sockaddr_in server_addr;
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0)
@@ -109,8 +123,19 @@ int main()
     }
 
     printf("Connected to the server. Type 'exit' to quit.\n");
-    receive_initial_board(sockfd);
-    chat_with_server(sockfd);
+    receive_initial_board(sockfd,buffer);
+    client_color(sockfd);
+    while(1)
+    {
+        chat_with_server(sockfd);
+        printf("Do you wish to play again with the same player? Type 'yes' if you do.\n");
+        fgets(buffer,sizeof(buffer),stdin);
+        if (write(sockfd, buffer, strlen(buffer)) < 0)
+        {
+            perror("Failed to send message");
+            break;
+        }
+    }
     close(sockfd);
     return 0;
 }
