@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #define white_king 0x2654   // ♔
 #define white_queen 0x2655  // ♕
@@ -109,11 +110,10 @@ void print_board(wchar_t board[8][8], int is_white_turn)
     }
 }
 
-
 void serialize_board(wchar_t board[8][8], char *buffer, int is_white_turn)
 {
     char *ptr = buffer;
-    if(is_white_turn)
+    if (is_white_turn)
     {
         for (int i = 0; i < 8; i++)
         {
@@ -141,7 +141,7 @@ int validate_pawn_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, in
 {
     wchar_t piece = board[src_x][src_y];
     int direction = (piece == white_pawn) ? -1 : 1; // White pawns move up (-1), black move down (+1)
-    
+
     // Single step forward
     if (dest_x == src_x + direction && dest_y == src_y && (board[dest_x][dest_y] == white_square || board[dest_x][dest_y] == black_square))
         return 1;
@@ -162,33 +162,183 @@ int validate_pawn_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, in
 
 int validate_rook_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
-    return 0;
+    // rook: straight line horizontally/vertically
+    if (src_x != dest_x && src_y != dest_y)
+    {
+        return 0; // invalid if not along same row or column
+    }
+
+    int step_x = (dest_x > src_x) ? 1 : (dest_x < src_x) ? -1
+                                                         : 0;
+    int step_y = (dest_y > src_y) ? 1 : (dest_y < src_y) ? -1
+                                                         : 0;
+
+    // check for obstacles along the rooks path
+    int x = src_x + step_x, y = src_y + step_y;
+    while (x != dest_x || y != dest_y)
+    {
+        if (board[x][y] != white_square && board[x][y] != black_square)
+            return 0; // path blocked by another piece
+        x += step_x;
+        y += step_y;
+    }
+
+    // destination square cannot contain a piece of the same color as the rook
+    wchar_t piece = board[src_x][src_y];
+    if ((piece <= white_pawn && board[dest_x][dest_y] <= white_pawn) ||
+        (piece >= black_king && board[dest_x][dest_y] >= black_king))
+        return 0;
+
+    return 1;
 }
 
 int validate_knight_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
+    // knight moves in an 'L' shape
+    int dx = abs(dest_x - src_x);
+    int dy = abs(dest_y - src_y);
+
+    if ((dx == 2 && dy == 1) || (dx == 1 && dy == 2))
+    {
+        // destination square cannot contain a piece of the same color as the knight
+        wchar_t piece = board[src_x][src_y];
+        if ((piece <= white_pawn && board[dest_x][dest_y] <= white_pawn) ||
+            (piece >= black_king && board[dest_x][dest_y] >= black_king))
+            return 0; // invalid move
+
+        return 1;
+    }
+
     return 0;
 }
 
 int validate_bishop_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
-    return 0;
+    // Bishop moves diagonally, so the difference in x and y coordinates must be the same
+    if (abs(dest_x - src_x) != abs(dest_y - src_y))
+        return 0;
+
+    int step_x = (dest_x > src_x) ? 1 : (dest_x < src_x) ? -1
+                                                         : 0;
+    int step_y = (dest_y > src_y) ? 1 : (dest_y < src_y) ? -1
+                                                         : 0;
+
+    // check for obstacles along the bishops path
+    int x = src_x + step_x, y = src_y + step_y;
+    while (x != dest_x || y != dest_y)
+    {
+        if (board[x][y] != white_square && board[x][y] != black_square)
+            return 0; // path blocked by another piece
+        x += step_x;
+        y += step_y;
+    }
+
+    // destination square cannot contain a piece of the same color as the bishop
+    wchar_t piece = board[src_x][src_y];
+    if ((piece <= white_pawn && board[dest_x][dest_y] <= white_pawn) ||
+        (piece >= black_king && board[dest_x][dest_y] >= black_king))
+        return 0;
+
+    return 1;
 }
 
 int validate_queen_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
-    return 0;
+    // queen moves like a rook or a bishop
+    if (src_x == dest_x || src_y == dest_y)
+    {
+        return validate_rook_move(board, src_x, src_y, dest_x, dest_y);
+    }
+    else if (abs(dest_x - src_x) == abs(dest_y - src_y))
+    {
+        return validate_bishop_move(board, src_x, src_y, dest_x, dest_y);
+    }
+
+    return 0; // invalid move
 }
 
 int validate_king_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
+    int dx = abs(dest_x - src_x);
+    int dy = abs(dest_y - src_y);
+
+    // king moves 1 square in any direction
+    if (dx <= 1 && dy <= 1)
+    {
+        // destination square cannot contain a piece of the same color as the king
+        wchar_t piece = board[src_x][src_y];
+        if ((piece <= white_pawn && board[dest_x][dest_y] <= white_pawn) ||
+            (piece >= black_king && board[dest_x][dest_y] >= black_king))
+            return 0; // invalid move
+
+        return 1;
+    }
+
     return 0;
+}
+
+bool is_syntax_valid(int player, char *move)
+{
+    // check length of the move (len = 2 or len = 3)
+    // ex: a3, d4, Ke5, Bg4 etc...
+    int len = strlen(move);
+    if (len != 2 && len != 3)
+    {
+        send(player, "e-00", 4, 0);
+        return false;
+    }
+
+    if (len == 2)
+    {
+        // check if the first character is between 'a' and 'h'
+        if (move[0] < 'a' || move[0] > 'h')
+        {
+            send(player, "e-01", 4, 0);
+            return false;
+        }
+        // check if the second character is between '1' and '8'
+        if (move[1] < '1' || move[1] > '8')
+        {
+            send(player, "e-02", 4, 0);
+            return false;
+        }
+    }
+
+    else if (len == 3)
+    {
+        // check if the first character is a valid piece identifier
+        // K = king
+        // Q = queen
+        // R = rook
+        // B = bishop
+        // N = knight
+
+        if (move[0] != 'K' && move[0] != 'Q' && move[0] != 'R' && move[0] != 'B' && move[0] != 'N')
+        {
+            send(player, "e-03", 4, 0);
+            return false;
+        }
+        // check if the first character is between 'a' and 'h'
+        if (move[1] < 'a' || move[1] > 'h')
+        {
+            send(player, "e-04", 4, 0); // invalid column
+            return false;
+        }
+        // check if the second character is between '1' and '8'
+        if (move[2] < '1' || move[2] > '8')
+        {
+            send(player, "e-05", 4, 0); // invalid row
+            return false;
+        }
+    }
+
+    return true;
 }
 
 int is_valid_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y, int is_white_turn)
 {
     wchar_t piece = board[src_x][src_y];
-    
+
     if (piece == black_square || piece == white_square)
         return 0;
 
@@ -199,11 +349,11 @@ int is_valid_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int des
     }
     else
     {
-        if (piece > black_pawn || piece < black_king )
+        if (piece > black_pawn || piece < black_king)
             return 0;
     }
 
-    if (src_x < 0 || src_x >= 8 || src_y < 0 || src_y >= 8 || 
+    if (src_x < 0 || src_x >= 8 || src_y < 0 || src_y >= 8 ||
         dest_x < 0 || dest_x >= 8 || dest_y < 0 || dest_y >= 8)
         return 0;
 
@@ -249,7 +399,6 @@ void parse_move(const char *input, int *src_x, int *src_y, int *dest_x, int *des
     *dest_x = 8 - (input[4] - '0');
 }
 
-
 int choose_color()
 {
     int color;
@@ -263,17 +412,31 @@ int choose_color()
     return color == 1;
 }
 
-int replay()
+int replay(int fd1, int fd2)
 {
-    int choice;
-    printf("Play again with same player = 1; quit = 2\n");
-    do
-    {
-        printf("Choose your answer: ");
-        scanf("%d", &choice);
-    } while ((choice != 1) && (choice != 2));
+    char response1[16], response2[16];
+    const char *prompt = "Do you want to replay with this player?\n Type 'yes' or 'no':\n";
 
-    return choice == 1;
+    // ask player 1
+    write(fd1, prompt, strlen(prompt));
+    memset(response1, 0, sizeof(response1));
+    read(fd1, response1, sizeof(response1));
+    response1[strcspn(response1, "\n")] = 0; // remove the 'newline' at the end of the response
+
+    // ask player 2
+    write(fd2, prompt, strlen(prompt));
+    memset(response2, 0, sizeof(response2));
+    read(fd2, response2, sizeof(response2));
+    response2[strcspn(response2, "\n")] = 0; // remove the 'newline' at the end of the response
+
+    // check their responses
+    if (strcmp(response1, "yes") == 0 && strcmp(response2, "yes") == 0)
+    {
+        return 1; // both players want to replay
+    }
+
+    // the replay
+    return 0;
 }
 
 int main()
@@ -285,7 +448,7 @@ int main()
 
     memset(buffer, 0, sizeof(buffer));
     init(board);
-    //print_board(board,is_white_turn);
+    // print_board(board,is_white_turn);
 
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0)
@@ -336,9 +499,9 @@ int main()
     printf("Two players connected!\n");
 
     char board_buffer[1024];
-    serialize_board(board, board_buffer,is_white_turn);
+    serialize_board(board, board_buffer, is_white_turn);
     write(fd1, board_buffer, strlen(board_buffer));
-    serialize_board(board, board_buffer,!is_white_turn);
+    serialize_board(board, board_buffer, !is_white_turn);
     write(fd2, board_buffer, strlen(board_buffer));
 
     while (1)
@@ -358,7 +521,7 @@ int main()
             if (make_move(board, src_x, src_y, dest_x, dest_y, is_white_turn))
             {
                 char board_buffer[1024];
-                serialize_board(board, board_buffer,is_white_turn);
+                serialize_board(board, board_buffer, is_white_turn);
                 write(fd1, board_buffer, strlen(board_buffer));
                 is_white_turn = !is_white_turn;
                 write(fd2, board_buffer, strlen(board_buffer));
@@ -369,6 +532,17 @@ int main()
                 write(current_fd, error_msg, strlen(error_msg));
             }
         }
+
+        // for replay
+        if (replay(fd1, fd2))
+        {
+            init(board); // reset board
+            is_white_turn = 0;
+        }
+        else
+        {
+            break; // if the players don't agree to replay => exit
+        }
     }
 
     close(fd1);
@@ -376,7 +550,7 @@ int main()
     close(sockfd);
     return 0;
 }
-//todo: let players choose who goes first, rand() if both pick the same answer
-//rest of the pieces validated
-//allow more than just two players to play at the same time
-//implement replay
+// todo: let players choose who goes first, rand() if both pick the same answer
+// rest of the pieces validated
+// allow more than just two players to play at the same time
+// implement replay
