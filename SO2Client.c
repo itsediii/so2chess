@@ -20,7 +20,7 @@ int chat_with_server(int sockfd)
         if (write(sockfd, buffer, strlen(buffer)) < 0)
         {
             perror("Failed to send message");
-            break;
+            exit(EXIT_FAILURE);
         }
         if (strncmp(buffer, "exit", 4) == 0)
         {
@@ -58,9 +58,9 @@ void receive_initial_board(int sockfd, char *buffer)
 void client_color(int sockfd)
 {
     int color;
-    printf("Choose your color:1 for White, 2 for Black\n");
+    printf("Choose your color:1 for Black, 2 for White\n");
     scanf("%d",&color);
-    send(socket, &color, sizeof(color), 0);
+    send(sockfd, &color, sizeof(color), 0);
 }
 
 
@@ -123,16 +123,26 @@ int main()
     }
 
     printf("Connected to the server. Type 'exit' to quit.\n");
-    receive_initial_board(sockfd,buffer);
     client_color(sockfd);
+    receive_initial_board(sockfd,buffer);
     while(1)
     {
-        chat_with_server(sockfd);
-        printf("Do you wish to play again with the same player? Type 'yes' if you do.\n");
-        fgets(buffer,sizeof(buffer),stdin);
-        if (write(sockfd, buffer, strlen(buffer)) < 0)
+        if(chat_with_server(sockfd))
         {
-            perror("Failed to send message");
+            printf("Do you wish to play again with the same gplayer? Type 'yes' if you do.\n");
+            fgets(buffer,sizeof(buffer),stdin);
+            if(strcmp(buffer, "yes") != 0)
+            {
+                break;
+            }
+            if (write(sockfd, buffer, strlen(buffer)) < 0)
+            {
+                perror("Failed to send message");
+                exit(EXIT_FAILURE);
+            }
+        }
+        else
+        {
             break;
         }
     }

@@ -140,24 +140,25 @@ void serialize_board(wchar_t board[8][8], char *buffer, int is_white_turn)
 int validate_pawn_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
     wchar_t piece = board[src_x][src_y];
+
     int direction = (piece == white_pawn) ? -1 : 1; // White pawns move up (-1), black move down (+1)
 
-    // Single step forward
-    if (dest_x == src_x + direction && dest_y == src_y && (board[dest_x][dest_y] == white_square || board[dest_x][dest_y] == black_square))
+    int delta_x = dest_x - src_x;
+    int delta_y = dest_y - src_y;
+
+    // Standard one-square forward move
+    if (delta_x == direction && delta_y == 0 && (board[dest_x][dest_y] == white_square || board[dest_x][dest_y]==black_square))
         return 1;
 
-    // Capture diagonally
-    if (dest_x == src_x + direction && abs(dest_y - src_y) == 1 && (board[dest_x][dest_y] != white_square || board[dest_x][dest_y] != black_square))
+    // Two-square move from starting position
+    if (delta_x == 2 * direction && delta_y == 0 && ((src_x == 1 && piece == black_pawn) || (src_x == 6 && piece == white_pawn)) && (board[src_x + direction][src_y] == white_square || board[src_x + direction][src_y] == black_square) && (board[dest_x][dest_y] == white_square || board[dest_x][dest_y] == black_square))
+        return 1;
+    // Capturing move (diagonal)
+    if (delta_x == direction && (delta_y == 1 || delta_y == -1) &&
+        ((direction == 1 && board[dest_x][dest_y] >= white_king && board[dest_x][dest_y] <= white_pawn) || (direction == -1 && board[dest_x][dest_y] >= black_king && board[dest_x][dest_y] <= black_pawn))) // White pawn captures black piece
         return 1;
 
-    // Double step forward (only on starting row)
-    if ((src_x == 6 && piece == white_pawn) || (src_x == 1 && piece == black_pawn))
-    {
-        if (dest_x == src_x + 2 * direction && dest_y == src_y && board[src_x + direction][src_y] == white_square && board[dest_x][dest_y] == white_square)
-            return 1;
-    }
-
-    return 0;
+    return 0; // Invalid move
 }
 
 int validate_rook_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
@@ -183,9 +184,11 @@ int validate_rook_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, in
     }
 
     // destination square cannot contain a piece of the same color as the rook
-    if ((board[src_x][src_y] <= white_pawn && board[dest_x][dest_y] <= white_pawn) || (board[src_x][src_y] >= black_king && board[dest_x][dest_y] >= black_king))
+    if ((board[dest_x][dest_y] != white_square && board[dest_x][dest_y] != black_square) &&
+        ((board[src_x][src_y] <= white_pawn && board[dest_x][dest_y] <= white_pawn) || 
+         (board[src_x][src_y] >= black_king && board[dest_x][dest_y] >= black_king)))
     {
-        return 0;
+        return 0; // Cannot capture a piece of the same color
     }
     return 1;
 }
@@ -193,15 +196,15 @@ int validate_rook_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, in
 int validate_knight_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
     wchar_t piece = board[src_x][src_y];
-    // knight moves in an 'L' shape
     int dx = abs(dest_x - src_x);
     int dy = abs(dest_y - src_y);
 
     if ((dx == 2 && dy == 1) || (dx == 1 && dy == 2))
     {
-        // destination square cannot contain a piece of the same color as the knight
-        if ((piece <= white_pawn && board[dest_x][dest_y] <= white_pawn) || (piece >= black_king && board[dest_x][dest_y] >= black_king))
-            return 0; // invalid move
+    if ((board[dest_x][dest_y] != white_square && board[dest_x][dest_y] != black_square) &&
+        ((board[src_x][src_y] <= white_pawn && board[dest_x][dest_y] <= white_pawn) || 
+         (board[src_x][src_y] >= black_king && board[dest_x][dest_y] >= black_king)))
+            return 0;
 
         return 1;
     }
@@ -210,6 +213,7 @@ int validate_knight_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, 
 
 int validate_bishop_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
+    wchar_t piece = board[src_x][src_y];
     // Bishop moves diagonally, so the difference in x and y coordinates must be the same
     if (abs(dest_x - src_x) != abs(dest_y - src_y))
         return 0;
@@ -228,9 +232,10 @@ int validate_bishop_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, 
     }
 
     // destination square cannot contain a piece of the same color as the bishop
-    wchar_t piece = board[src_x][src_y];
-    if ((piece <= white_pawn && board[dest_x][dest_y] <= white_pawn) ||
-        (piece >= black_king && board[dest_x][dest_y] >= black_king))
+
+    if ((board[dest_x][dest_y] != white_square && board[dest_x][dest_y] != black_square) &&
+        ((board[src_x][src_y] <= white_pawn && board[dest_x][dest_y] <= white_pawn) || 
+         (board[src_x][src_y] >= black_king && board[dest_x][dest_y] >= black_king)))
         return 0;
 
     return 1;
@@ -238,32 +243,29 @@ int validate_bishop_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, 
 
 int validate_queen_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
-    // queen moves like a rook or a bishop
     if (src_x == dest_x || src_y == dest_y)
     {
         return validate_rook_move(board, src_x, src_y, dest_x, dest_y);
     }
-    else if (abs(dest_x - src_x) == abs(dest_y - src_y))
+    else
     {
         return validate_bishop_move(board, src_x, src_y, dest_x, dest_y);
     }
 
-    return 0; // invalid move
+    return 0;
 }
 
 int validate_king_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y)
 {
+    wchar_t piece = board[src_x][src_y];
     int dx = abs(dest_x - src_x);
     int dy = abs(dest_y - src_y);
-
-    // king moves 1 square in any direction
     if (dx <= 1 && dy <= 1)
-    {
-        // destination square cannot contain a piece of the same color as the king
-        wchar_t piece = board[src_x][src_y];
-        if ((piece <= white_pawn && board[dest_x][dest_y] <= white_pawn) || (piece >= black_king && board[dest_x][dest_y] >= black_king))
-            return 0; // invalid move
-
+    {        
+        if ((board[dest_x][dest_y] != white_square && board[dest_x][dest_y] != black_square) &&
+        ((board[src_x][src_y] <= white_pawn && board[dest_x][dest_y] <= white_pawn) || 
+         (board[src_x][src_y] >= black_king && board[dest_x][dest_y] >= black_king)))
+            return 0; 
         return 1;
     }
 
@@ -272,24 +274,30 @@ int validate_king_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, in
 
 int is_valid_move(wchar_t board[8][8], int src_x, int src_y, int dest_x, int dest_y, int is_white_turn)
 {
+    if (src_x < 0 || src_x >= 8 || src_y < 0 || src_y >= 8 || dest_x < 0 || dest_x >= 8 || dest_y < 0 || dest_y >= 8)
+    {
+        return 0;
+    }
+
     wchar_t piece = board[src_x][src_y];
 
     if (piece == black_square || piece == white_square)
+    {
         return 0;
+    }
 
     if (is_white_turn)
     {
-        if (piece > white_pawn || piece < white_king)
+        if (piece >= white_pawn && piece <= white_king)
             return 0;
     }
     else
     {
-        if (piece > black_pawn || piece < black_king)
+        if (piece >= black_pawn && piece <= black_king)
             return 0;
     }
 
-    if (src_x < 0 || src_x >= 8 || src_y < 0 || src_y >= 8 || dest_x < 0 || dest_x >= 8 || dest_y < 0 || dest_y >= 8)
-        return 0;
+
 
     switch (piece)
     {
@@ -357,11 +365,6 @@ int choose_color(int fd1, int fd2)
     {
         color2 = (color1 == 1) ? 2 : 1;
     }
-    /*char message1[25], message2[25];
-    snprintf(message1, sizeof(message1), "You are assigned %s.\n", color1 == 1 ? "White" : "Black");
-    snprintf(message2, sizeof(message2), "You are assigned %s.\n", color2 == 1 ? "White" : "Black");
-    write(fd1, message1, strlen(message1)+1);
-    write(fd2, message2, strlen(message2)+1);*/
     return (color1==1);
 }
 
@@ -418,7 +421,7 @@ int main()
     wchar_t board[8][8];
     char message_buffer[256];
     char board_buffer[1024];
-    int is_white_turn = 0;
+    int is_white_turn = 1;
     int winner=0;
 
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -493,7 +496,7 @@ int main()
 
             if (read(current_fd, message_buffer, sizeof(message_buffer)) > 0)
             {
-                printf("Player %s: %s", is_white_turn ? "White" : "Black", message_buffer);
+                printf("%s: %s", is_white_turn ? "White" : "Black", message_buffer);
 
                 int src_x, src_y, dest_x, dest_y;
                 parse_move(message_buffer, &src_x, &src_y, &dest_x, &dest_y);
@@ -517,6 +520,8 @@ int main()
                     {
                         const char *error_msg = "Invalid move. Try again.\n";
                         write(current_fd, error_msg, strlen(error_msg));
+                        read(current_fd, message_buffer, sizeof(message_buffer));
+                        parse_move(message_buffer, &src_x, &src_y, &dest_x, &dest_y);
                     }
                 }
                 if(winner==2)
@@ -543,6 +548,3 @@ int main()
     close(sockfd);
     return 0;
 }
-//todo: redo pawn movement
-// test other pieces validation
-// allow more than just two players to play at the same time
